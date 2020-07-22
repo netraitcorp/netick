@@ -1,115 +1,126 @@
 package server
 
 import (
-	"bytes"
 	"context"
-	"log"
+	"crypto/sha1"
+	"fmt"
 	"net"
-	"sync"
-	"sync/atomic"
 
 	"github.com/netraitcorp/netick/pkg/safe"
+
+	"github.com/gorilla/websocket"
 )
 
-type conn struct {
-	srv    *Server
-	id     uint64
-	mu     sync.Mutex
-	rw     net.Conn
-	closed safe.AtomicBool
-	rb     *bytes.Buffer
-	wc     chan []byte
+type ReadHandler func(c Conn, data []byte) error
+
+type Conn interface {
+	UniqID() string
+	LocalAddr() net.Addr
+	RemoteAddr() net.Addr
+	Accept()
+	Close() error
+	Write(data []byte)
+	Bind(ReadHandler)
 }
 
-var connUniqueIncr uint64
+type WebsocketConn struct {
+	conn      *websocket.Conn
+	uniqID    string
+	buf       chan []byte
+	cancelCtx context.CancelFunc
+	closed    safe.AtomicBool
+	handler   ReadHandler
+}
 
-func newConnection(srv *Server, rw net.Conn) *conn {
-	c := &conn{
-		srv: srv,
-		id:  atomic.AddUint64(&connUniqueIncr, 1),
-		rw:  rw,
-		rb:  connBufferPool.Get().(*bytes.Buffer),
-		wc:  make(chan []byte, 16),
+func NewWebsocketConn(conn *websocket.Conn) *WebsocketConn {
+	h := sha1.New()
+	_, _ = h.Write([]byte(fmt.Sprintf("tcp:%s:%s", conn.RemoteAddr(), conn.LocalAddr())))
+	connUniqID := fmt.Sprintf("%x", h.Sum(nil))
+
+	c := &WebsocketConn{
+		conn:   conn,
+		uniqID: connUniqID,
+		buf:    make(chan []byte, 0x40),
 	}
+
 	return c
 }
 
-func (c *conn) LocalAddr() net.Addr {
-	return c.rw.LocalAddr()
+func (c *WebsocketConn) Bind(h ReadHandler) {
+	c.handler = h
 }
 
-func (c *conn) RemoteAddr() net.Addr {
-	return c.rw.RemoteAddr()
+func (c *WebsocketConn) UniqID() string {
+	return c.uniqID
 }
 
-func (c *conn) ID() uint64 {
-	return c.id
+func (c *WebsocketConn) LocalAddr() net.Addr {
+	return c.conn.LocalAddr()
 }
 
-func (c *conn) Close() error {
+func (c *WebsocketConn) RemoteAddr() net.Addr {
+	return c.conn.RemoteAddr()
+}
+
+func (c *WebsocketConn) Accept() {
+	ctx, cancelCtx := context.WithCancel(context.Background())
+
+	c.cancelCtx = cancelCtx
+
+	readCtx, _ := context.WithCancel(ctx)
+	go c.loopRead(readCtx)
+
+	writeCtx, _ := context.WithCancel(ctx)
+	go c.loopWrite(writeCtx)
+}
+
+func (c *WebsocketConn) Close() error {
 	if c.closed.IsSet() {
 		return nil
 	}
 	c.closed.Set()
-
-	return c.rw.Close()
+	if c.cancelCtx != nil {
+		c.cancelCtx()
+	}
+	return c.conn.Close()
 }
 
-func (c *conn) Write(data []byte) {
-	c.wc <- data
+func (c *WebsocketConn) Write(data []byte) {
+	c.buf <- data
 }
 
-func (c *conn) accept() {
-	ctx, cancelCtx := context.WithCancel(context.Background())
-
-	go c.loopRead(cancelCtx)
-
-	go c.loopWrite(ctx)
-}
-
-func (c *conn) loopRead(cancelCtx context.CancelFunc) {
-	defer func() {
-		cancelCtx()
-		c.rb.Reset()
-		connBufferPool.Put(c.rb)
-	}()
-
-	buf := make([]byte, 0x800)
+func (c *WebsocketConn) loopRead(ctx context.Context) {
 	for {
-		n, err := c.rw.Read(buf)
-		if c.closed.IsSet() {
+		_, data, err := c.conn.ReadMessage()
+		select {
+		case <-ctx.Done():
 			return
+		default:
 		}
+
 		if err != nil {
 			_ = c.Close()
-
 			return
 		}
 
-		c.rb.Write(buf[:n])
-
-		c.rb.Reset()
+		if c.handler != nil {
+			if err := c.handler(c, data); err != nil {
+				_ = c.Close()
+			}
+		}
 	}
 }
 
-func (c *conn) loopWrite(ctx context.Context) {
+func (c *WebsocketConn) loopWrite(ctx context.Context) {
 	for {
 		select {
-		case data := <-c.wc:
-			n, err := c.rw.Write(data)
-			log.Printf("[DEBUG] write to client, %v\n, %d, %s", data, n, err.Error())
-
+		case data := <-c.buf:
+			if err := c.conn.WriteMessage(websocket.BinaryMessage, data); err != nil {
+				c.Close()
+				return
+			}
 		case <-ctx.Done():
 			return
 		}
 	}
-}
-
-var connBufferPool = NewBufferPoll()
-
-func NewBufferPoll() (pool sync.Pool) {
-	pool.New = func() interface{} {
-		return &bytes.Buffer{}
-	}
-	return pool
 }

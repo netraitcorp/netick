@@ -6,13 +6,14 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/netraitcorp/netick/pkg/server"
 )
 
 const (
 	appName    = "netick"
-	appDesc    = ""
+	appDesc    = "netick"
 	appVersion = "0.1.0"
 )
 
@@ -81,7 +82,12 @@ func main() {
 		_ = http.ListenAndServe("", nil)
 	}()
 
-	if err := server.RunServer(addressFlag); err != nil {
-		log.Fatalf("server run error: %s\n", err.Error())
+	opt := &server.WebsocketOptions{
+		Addr:         addressFlag,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 5 * time.Second,
+	}
+	if err := server.RunWebsocketServer(opt); err != nil {
+		log.Fatalf("tcp server run error: %s\n", err.Error())
 	}
 }

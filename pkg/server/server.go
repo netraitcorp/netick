@@ -1,14 +1,69 @@
 package server
 
 import (
-	"net"
+	"log"
+	"net/http"
 	"time"
+
+	"github.com/gorilla/websocket"
 )
 
-type Server struct {
-	Addr string
+type WebsocketOptions struct {
+	Addr         string
+	ReadTimeout  time.Duration
+	WriteTimeout time.Duration
 }
 
+type WebsocketServer struct {
+	addr     string
+	rt       time.Duration
+	wt       time.Duration
+	httpSrv  *http.Server
+	upgrader *websocket.Upgrader
+}
+
+func (srv *WebsocketServer) ListenAndServe() error {
+	srv.httpSrv = &http.Server{
+		Addr:         srv.addr,
+		Handler:      srv,
+		ReadTimeout:  srv.rt,
+		WriteTimeout: srv.wt,
+	}
+	if err := srv.httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		return err
+	}
+	return nil
+}
+
+func (srv *WebsocketServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	wsConn, err := srv.upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Printf("[ERROR] Websocket conn failed, %s", err.Error())
+		return
+	}
+	conn := NewWebsocketConn(wsConn)
+	go conn.Accept()
+}
+
+func RunWebsocketServer(opt *WebsocketOptions) error {
+	upgrader := &websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin: func(r *http.Request) bool {
+			return true
+		},
+	}
+
+	srv := &WebsocketServer{
+		addr:     opt.Addr,
+		rt:       opt.ReadTimeout,
+		wt:       opt.WriteTimeout,
+		upgrader: upgrader,
+	}
+	return srv.ListenAndServe()
+}
+
+/*
 func (srv *Server) ListenAndServe() error {
 	ln, err := net.Listen("tcp", srv.Addr)
 	if err != nil {
@@ -40,18 +95,11 @@ func (srv *Server) serve(ln net.Listener) error {
 		tempDelay = 0
 
 		c := srv.createConn(rw)
-		c.accept()
+		c.Accept()
 	}
 }
 
 func (srv *Server) createConn(rw net.Conn) *Conn {
-	return newConnection(srv, rw)
+	return NewConnection(rw)
 }
-
-func RunServer(addr string) error {
-
-	srv := &Server{
-		Addr: addr,
-	}
-	return srv.ListenAndServe()
-}
+*/
