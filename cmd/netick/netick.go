@@ -3,11 +3,11 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
-	"net/http"
+	stdlog "log"
 	"os"
 	"time"
 
+	"github.com/netraitcorp/netick/pkg/log"
 	"github.com/netraitcorp/netick/pkg/server"
 )
 
@@ -78,16 +78,15 @@ func main() {
 		os.Exit(2)
 	}
 
-	go func() {
-		_ = http.ListenAndServe("", nil)
-	}()
+	log.InitLogger(log.NewOptions())
 
 	opt := &server.WebsocketOptions{
 		Addr:         addressFlag,
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 5 * time.Second,
 	}
+
 	if err := server.RunWebsocketServer(opt); err != nil {
-		log.Fatalf("tcp server run error: %s\n", err.Error())
+		stdlog.Fatalf("tcp server run error: %s\n", err.Error())
 	}
 }

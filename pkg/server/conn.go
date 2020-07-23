@@ -6,12 +6,9 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/netraitcorp/netick/pkg/safe"
-
 	"github.com/gorilla/websocket"
+	"github.com/netraitcorp/netick/pkg/safe"
 )
-
-type ReadHandler func(c Conn, data []byte) error
 
 type Conn interface {
 	UniqID() string
@@ -20,7 +17,7 @@ type Conn interface {
 	Accept()
 	Close() error
 	Write(data []byte)
-	Bind(ReadHandler)
+	Bind(Handler)
 }
 
 type WebsocketConn struct {
@@ -29,7 +26,7 @@ type WebsocketConn struct {
 	buf       chan []byte
 	cancelCtx context.CancelFunc
 	closed    safe.AtomicBool
-	handler   ReadHandler
+	handler   Handler
 }
 
 func NewWebsocketConn(conn *websocket.Conn) *WebsocketConn {
@@ -46,7 +43,7 @@ func NewWebsocketConn(conn *websocket.Conn) *WebsocketConn {
 	return c
 }
 
-func (c *WebsocketConn) Bind(h ReadHandler) {
+func (c *WebsocketConn) Bind(h Handler) {
 	c.handler = h
 }
 
@@ -104,7 +101,7 @@ func (c *WebsocketConn) loopRead(ctx context.Context) {
 		}
 
 		if c.handler != nil {
-			if err := c.handler(c, data); err != nil {
+			if err := c.handler.DealData(data); err != nil {
 				_ = c.Close()
 			}
 		}
@@ -116,7 +113,7 @@ func (c *WebsocketConn) loopWrite(ctx context.Context) {
 		select {
 		case data := <-c.buf:
 			if err := c.conn.WriteMessage(websocket.BinaryMessage, data); err != nil {
-				c.Close()
+				_ = c.Close()
 				return
 			}
 		case <-ctx.Done():

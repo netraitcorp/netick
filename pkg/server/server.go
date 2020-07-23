@@ -42,6 +42,8 @@ func (srv *WebsocketServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	conn := NewWebsocketConn(wsConn)
+	conn.Bind(NewReadHandler(conn))
+
 	go conn.Accept()
 }
 
