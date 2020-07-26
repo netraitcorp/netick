@@ -5,50 +5,70 @@ import (
 	"crypto/sha1"
 	"fmt"
 	"net"
+	"time"
+
+	"github.com/netraitcorp/netick/pkg/log"
 
 	"github.com/gorilla/websocket"
 	"github.com/netraitcorp/netick/pkg/safe"
 )
 
 type Conn interface {
-	UniqID() string
+	ConnID() string
 	LocalAddr() net.Addr
 	RemoteAddr() net.Addr
 	Accept()
 	Close() error
 	Write(data []byte)
-	Bind(Handler)
+	Server() Server
+}
+
+type pingt struct {
+	lastp        time.Time
+	timer        *time.Timer
+	pingOutTimes int
 }
 
 type WebsocketConn struct {
+	srv       Server
 	conn      *websocket.Conn
-	uniqID    string
+	ping      pingt
+	connID    string
 	buf       chan []byte
+	handler   Handler
 	cancelCtx context.CancelFunc
 	closed    safe.AtomicBool
-	handler   Handler
 }
 
-func NewWebsocketConn(conn *websocket.Conn) *WebsocketConn {
+func NewWebsocketConn(conn *websocket.Conn, srv Server) *WebsocketConn {
+	rawConnKey := fmt.Sprintf("tcp:%s <-> tcp:%s", conn.RemoteAddr(), conn.LocalAddr())
 	h := sha1.New()
-	_, _ = h.Write([]byte(fmt.Sprintf("tcp:%s:%s", conn.RemoteAddr(), conn.LocalAddr())))
+	_, _ = h.Write([]byte(rawConnKey))
 	connUniqID := fmt.Sprintf("%x", h.Sum(nil))
-
 	c := &WebsocketConn{
+		srv:    srv,
 		conn:   conn,
-		uniqID: connUniqID,
+		connID: connUniqID,
 		buf:    make(chan []byte, 0x40),
 	}
+	c.handler = NewReadHandler(c)
+	c.conn.SetPongHandler(c.pongHandler)
+
+	if c.handler != nil {
+		c.handler.CreateConn()
+	}
+
+	log.Info("NewWebsocketConn: %s, connID: %s", rawConnKey, c.ConnID())
 
 	return c
 }
 
-func (c *WebsocketConn) Bind(h Handler) {
-	c.handler = h
+func (c *WebsocketConn) Server() Server {
+	return c.srv
 }
 
-func (c *WebsocketConn) UniqID() string {
-	return c.uniqID
+func (c *WebsocketConn) ConnID() string {
+	return c.connID
 }
 
 func (c *WebsocketConn) LocalAddr() net.Addr {
@@ -79,6 +99,13 @@ func (c *WebsocketConn) Close() error {
 	if c.cancelCtx != nil {
 		c.cancelCtx()
 	}
+
+	if c.handler != nil {
+		c.handler.Close()
+	}
+
+	log.Info("CloseWebsocketConn: connID: %s", c.ConnID())
+
 	return c.conn.Close()
 }
 
@@ -96,12 +123,14 @@ func (c *WebsocketConn) loopRead(ctx context.Context) {
 		}
 
 		if err != nil {
+			log.Error("LoopRead error: connID: %s, err: %s", c.ConnID(), err.Error())
+
 			_ = c.Close()
 			return
 		}
 
 		if c.handler != nil {
-			if err := c.handler.DealData(data); err != nil {
+			if err := c.handler.ReadData(data); err != nil {
 				_ = c.Close()
 			}
 		}
@@ -113,6 +142,8 @@ func (c *WebsocketConn) loopWrite(ctx context.Context) {
 		select {
 		case data := <-c.buf:
 			if err := c.conn.WriteMessage(websocket.BinaryMessage, data); err != nil {
+				log.Error("LoopWrite error: connID: %s, err: %s", c.ConnID(), err.Error())
+
 				_ = c.Close()
 				return
 			}
@@ -120,4 +151,25 @@ func (c *WebsocketConn) loopWrite(ctx context.Context) {
 			return
 		}
 	}
+}
+
+func (c *WebsocketConn) startPingTimer() {
+	d := c.srv.Options().PingInterval
+	if d > 0 {
+		c.ping.timer = time.AfterFunc(d, c.loopPingTimer)
+	}
+}
+
+func (c *WebsocketConn) loopPingTimer() {
+	if c.closed.IsSet() {
+		return
+	}
+	if c.ping.pingOutTimes+1 > c.srv.Options().MaxPingOutTimes {
+
+	}
+
+}
+
+func (c *WebsocketConn) pongHandler(appData string) error {
+	return nil
 }

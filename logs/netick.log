@@ -1,2 +1,0 @@
-{"level":"info","ts":1595511351.0349052,"caller":"log/log.go:79","msg":"无法获取网址","serviceName":"serviceName","url":"http://www.baidu.com","attempt":3,"backoff":1}
-1.595511472947711e+09	info	log/log.go:79	无法获取网址	{"serviceName": "serviceName", "url": "http://www.baidu.com", "attempt": 3, "backoff": 1}

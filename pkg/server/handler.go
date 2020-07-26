@@ -3,7 +3,9 @@ package server
 import "github.com/netraitcorp/netick/pkg/log"
 
 type Handler interface {
-	DealData(data []byte) error
+	CreateConn()
+	Close()
+	ReadData(data []byte) error
 }
 
 type ReadHandler struct {
@@ -11,16 +13,34 @@ type ReadHandler struct {
 	authorized bool
 }
 
-func (h *ReadHandler) DealData(data []byte) (err error) {
+func (h *ReadHandler) CreateConn() {
+
+}
+
+func (h *ReadHandler) Close() {
+
+}
+
+func (h *ReadHandler) ReadData(data []byte) (err error) {
 	if len(data) == 0 {
 		return
 	}
-	log.Info()
+
+	log.Debug("ReadData: connID: %s, data: %s", h.conn.ConnID(), data)
+
 	if !h.authorized {
 		return h.authorize()
 	}
 
 	return
+}
+
+func (h *ReadHandler) publish() {
+
+}
+
+func (h *ReadHandler) subscribe() {
+
 }
 
 func (h *ReadHandler) authorize() error {
