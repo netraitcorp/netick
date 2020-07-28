@@ -22,7 +22,7 @@ func NewOptions() *Options {
 	}
 	return &Options{
 		WebsocketOpts:   wsOpts,
-		PingInterval:    5 * time.Second,
+		PingInterval:    30 * time.Second,
 		MaxPingOutTimes: 3,
 	}
 }

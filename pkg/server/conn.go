@@ -13,6 +13,10 @@ import (
 	"github.com/netraitcorp/netick/pkg/safe"
 )
 
+const (
+	writeWait = 10 * time.Second
+)
+
 type Conn interface {
 	ConnID() string
 	LocalAddr() net.Addr
@@ -24,9 +28,8 @@ type Conn interface {
 }
 
 type pingt struct {
-	lastp        time.Time
-	timer        *time.Timer
-	pingOutTimes int
+	lastp time.Time
+	timer *time.Timer
 }
 
 type WebsocketConn struct {
@@ -52,7 +55,11 @@ func NewWebsocketConn(conn *websocket.Conn, srv Server) *WebsocketConn {
 		buf:    make(chan []byte, 0x40),
 	}
 	c.handler = NewReadHandler(c)
+
 	c.conn.SetPongHandler(c.pongHandler)
+	_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+
+	c.startPingTimer()
 
 	if c.handler != nil {
 		c.handler.CreateConn()
@@ -124,7 +131,6 @@ func (c *WebsocketConn) loopRead(ctx context.Context) {
 
 		if err != nil {
 			log.Error("LoopRead error: connID: %s, err: %s", c.ConnID(), err.Error())
-
 			_ = c.Close()
 			return
 		}
@@ -155,21 +161,38 @@ func (c *WebsocketConn) loopWrite(ctx context.Context) {
 
 func (c *WebsocketConn) startPingTimer() {
 	d := c.srv.Options().PingInterval
-	if d > 0 {
-		c.ping.timer = time.AfterFunc(d, c.loopPingTimer)
-	}
+	c.ping.timer = time.AfterFunc(d, c.loopPingTimer)
+	c.ping.lastp = time.Now()
 }
 
 func (c *WebsocketConn) loopPingTimer() {
+	c.ping.timer = nil
+
 	if c.closed.IsSet() {
 		return
 	}
-	if c.ping.pingOutTimes+1 > c.srv.Options().MaxPingOutTimes {
 
+	d := c.srv.Options().PingInterval * time.Duration(c.srv.Options().MaxPingOutTimes)
+	n := time.Now().Add(-d)
+	if c.ping.lastp.Before(n) {
+		_ = c.Close()
+		return
 	}
 
+	err := c.conn.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(writeWait))
+	if err != nil {
+		log.Warn("LoopPingTimer: writePingMessage failed, connID: %s, %s", c.ConnID(), err.Error())
+		_ = c.Close()
+		return
+	}
+
+	dd := c.srv.Options().PingInterval
+	c.ping.timer = time.AfterFunc(dd, c.loopPingTimer)
 }
 
 func (c *WebsocketConn) pongHandler(appData string) error {
+	c.ping.lastp = time.Now()
+
+	log.Debug("PongHandler: %s", c.ping.lastp.String())
 	return nil
 }
