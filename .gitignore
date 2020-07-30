@@ -12,7 +12,12 @@
 *.out
 
 # Dependency directories (remove the comment below to include it)
-# vendor/
+vendor
+
+# IDE
 .idea
 .vscode
+
+# Exclude directory
 logs
+pb/*.pb.go

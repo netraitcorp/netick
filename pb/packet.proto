@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+option go_package = ".;pb";
+
+package pb;
+
+message ConnectedRest {
+    string conn_id = 1;
+}
+
+message AuthReq {
+    string password = 1;
+}

@@ -1,9 +1,12 @@
 package server
 
-import "github.com/netraitcorp/netick/pkg/log"
+import (
+	"github.com/netraitcorp/netick/pb"
+	"github.com/netraitcorp/netick/pkg/types"
+)
 
 type Handler interface {
-	CreateConn()
+	CreateConn() error
 	Close()
 	ReadData(data []byte) error
 }
@@ -13,12 +16,18 @@ type ReadHandler struct {
 	authorized bool
 }
 
-func (h *ReadHandler) CreateConn() {
-
+func (h *ReadHandler) CreateConn() error {
+	data, err := packet.Marshal(types.OpConnected, &pb.ConnectedRest{
+		ConnId: h.conn.ConnID(),
+	})
+	if err != nil {
+		return err
+	}
+	h.conn.Write(data)
+	return nil
 }
 
 func (h *ReadHandler) Close() {
-
 }
 
 func (h *ReadHandler) ReadData(data []byte) (err error) {
@@ -26,12 +35,14 @@ func (h *ReadHandler) ReadData(data []byte) (err error) {
 		return
 	}
 
-	log.Debug("ReadData: connID: %s, data: %s", h.conn.ConnID(), data)
-
-	if !h.authorized {
-		return h.authorize()
+	opCode, payload, err := packet.Unmarshal(data)
+	if err != nil {
+		return err
 	}
-
+	switch opCode {
+	case types.OpAuth:
+		h.authorize(payload.(pb.AuthReq))
+	}
 	return
 }
 
@@ -43,7 +54,7 @@ func (h *ReadHandler) subscribe() {
 
 }
 
-func (h *ReadHandler) authorize() error {
+func (h *ReadHandler) authorize(req pb.AuthReq) error {
 	h.authorized = true
 
 	return nil
