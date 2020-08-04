@@ -6,6 +6,12 @@ type Options struct {
 	WebsocketOpts   *WebsocketOptions
 	PingInterval    time.Duration
 	MaxPingOutTimes int
+	Auth            *AuthOptions
+}
+
+type AuthOptions struct {
+	Timeout  time.Duration
+	Password string
 }
 
 type WebsocketOptions struct {
@@ -24,5 +30,9 @@ func NewOptions() *Options {
 		WebsocketOpts:   wsOpts,
 		PingInterval:    30 * time.Second,
 		MaxPingOutTimes: 3,
+		Auth: &AuthOptions{
+			Timeout:  10 * time.Second,
+			Password: "123456",
+		},
 	}
 }

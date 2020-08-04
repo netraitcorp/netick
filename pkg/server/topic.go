@@ -7,7 +7,7 @@ import (
 
 type Topic struct {
 	name           string
-	conns          sync.Map
+	accs           sync.Map
 	broadcastQueue chan []byte
 }
 
@@ -22,21 +22,54 @@ func NewTopic(name string) *Topic {
 func (t *Topic) BroadcastLoop() {
 	for {
 		data := <-t.broadcastQueue
-		t.conns.Range(func(key, value interface{}) bool {
-			//value.(*Conn).Write(data)
+		t.accs.Range(func(key, value interface{}) bool {
 			fmt.Println(data)
+
 			return true
 		})
 	}
 }
 
-/*
-func (t *Topic) Subscribe(c *Conn) {
-	t.conns.Store(c.ID(), c)
+func (t *Topic) Subscribe(acc *Account) {
+	t.accs.Store(acc.conn.ConnID(), acc)
 }
-
-*/
 
 func (t *Topic) UnSubscribe(id interface{}) {
-	t.conns.Delete(id)
+	t.accs.Delete(id)
 }
+
+func (t *Topic) HaveAccount() (exists bool) {
+	t.accs.Range(func(key, value interface{}) bool {
+		exists = true
+		return false
+	})
+	return
+}
+
+type Topics struct {
+	sync.Map
+	sync.Mutex
+}
+
+func (t *Topics) RemoveTopic(name string) {
+	t.Delete(name)
+}
+
+func (t *Topics) GetTopicForce(name string) *Topic {
+	var (
+		topic interface{}
+		ok    bool
+	)
+	topic, ok = t.Load(name)
+	if !ok {
+		t.Lock()
+		topic, ok = t.Load(name)
+		if !ok {
+			topic = NewTopic(name)
+		}
+		t.Unlock()
+	}
+	return topic.(*Topic)
+}
+
+var topics = &Topics{}

@@ -4,10 +4,13 @@ option go_package = ".;pb";
 
 package pb;
 
-message ConnectedRest {
-    string conn_id = 1;
-}
-
 message AuthReq {
     string password = 1;
+    string uid = 2;
+}
+
+message AuthRet {
+    string conn_id = 1;
+    bool authorized = 2;
+    string uid = 3;
 }

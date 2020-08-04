@@ -2,9 +2,10 @@ package server
 
 import (
 	"context"
-	"crypto/sha1"
 	"fmt"
+	"math/rand"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -16,29 +17,33 @@ type WebsocketConn struct {
 	srv       Server
 	conn      *websocket.Conn
 	ping      pingt
-	connID    string
+	connID    int64
 	buf       chan []byte
 	handler   Handler
 	cancelCtx context.CancelFunc
 	closed    safe.AtomicBool
+	mu        sync.Mutex
 }
 
 func NewWebsocketConn(conn *websocket.Conn, srv Server) *WebsocketConn {
 	rawConnKey := fmt.Sprintf("tcp:%s <-> tcp:%s", conn.RemoteAddr().String(), conn.LocalAddr().String())
-	h := sha1.New()
-	_, _ = h.Write([]byte(rawConnKey))
-	connUniqID := fmt.Sprintf("%x", h.Sum(nil))
+
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	connID := r.Int63()
+
 	c := &WebsocketConn{
 		srv:    srv,
 		conn:   conn,
-		connID: connUniqID,
+		connID: connID,
 		buf:    make(chan []byte, 0x40),
 	}
 	c.handler = NewReadHandler(c)
 	c.conn.SetPongHandler(c.pongHandler)
 	c.startPingTimer()
 
-	log.Info("NewWebsocketConn: %s, connID: %s", rawConnKey, c.ConnID())
+	c.handler.CreateConn()
+
+	log.Info("NewWebsocketConn: %s, connID: %d", rawConnKey, c.ConnID())
 
 	return c
 }
@@ -47,7 +52,7 @@ func (c *WebsocketConn) Server() Server {
 	return c.srv
 }
 
-func (c *WebsocketConn) ConnID() string {
+func (c *WebsocketConn) ConnID() int64 {
 	return c.connID
 }
 
@@ -60,14 +65,6 @@ func (c *WebsocketConn) RemoteAddr() net.Addr {
 }
 
 func (c *WebsocketConn) Accept() {
-	if c.handler != nil {
-		if err := c.handler.CreateConn(); err != nil {
-			log.Error("Handler.CreateConn: %s", err.Error())
-			_ = c.Close()
-			return
-		}
-	}
-
 	ctx, cancelCtx := context.WithCancel(context.Background())
 	c.cancelCtx = cancelCtx
 
@@ -82,7 +79,14 @@ func (c *WebsocketConn) Close() error {
 	if c.closed.IsSet() {
 		return nil
 	}
+	c.mu.Lock()
+	if c.closed.IsSet() {
+		c.mu.Unlock()
+		return nil
+	}
 	c.closed.Set()
+	c.mu.Unlock()
+
 	if c.cancelCtx != nil {
 		c.cancelCtx()
 	}
@@ -96,7 +100,7 @@ func (c *WebsocketConn) Close() error {
 		c.ping.timer = nil
 	}
 
-	log.Info("CloseWebsocketConn: connID: %s", c.ConnID())
+	log.Info("CloseWebsocketConn: connID: %d", c.ConnID())
 
 	return c.conn.Close()
 }
@@ -177,7 +181,7 @@ func (c *WebsocketConn) loopPingTimer() {
 	c.ping.timer = time.AfterFunc(dd, c.loopPingTimer)
 }
 
-func (c *WebsocketConn) pongHandler(appData string) error {
+func (c *WebsocketConn) pongHandler(string) error {
 	c.ping.lastp = time.Now()
 
 	log.Debug("PongHandler: %s", c.ping.lastp.String())

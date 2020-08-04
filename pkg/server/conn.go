@@ -10,7 +10,7 @@ const (
 )
 
 type Conn interface {
-	ConnID() string
+	ConnID() int64
 	LocalAddr() net.Addr
 	RemoteAddr() net.Addr
 	Accept()
