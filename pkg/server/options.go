@@ -3,7 +3,7 @@ package server
 import "time"
 
 type Options struct {
-	WebsocketOpts   *WebsocketOptions
+	Websocket       *WebsocketOptions
 	PingInterval    time.Duration
 	MaxPingOutTimes int
 	Auth            *AuthOptions
@@ -21,18 +21,19 @@ type WebsocketOptions struct {
 }
 
 func NewOptions() *Options {
-	wsOpts := &WebsocketOptions{
+	ws := &WebsocketOptions{
 		Addr:         "0.0.0.0:2634",
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 5 * time.Second,
 	}
+	auth := &AuthOptions{
+		Timeout:  10 * time.Second,
+		Password: "123456",
+	}
 	return &Options{
-		WebsocketOpts:   wsOpts,
+		Websocket:       ws,
 		PingInterval:    30 * time.Second,
 		MaxPingOutTimes: 3,
-		Auth: &AuthOptions{
-			Timeout:  10 * time.Second,
-			Password: "123456",
-		},
+		Auth:            auth,
 	}
 }

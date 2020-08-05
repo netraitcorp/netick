@@ -10,12 +10,13 @@ const (
 )
 
 type Conn interface {
-	ConnID() int64
+	ConnID() string
 	LocalAddr() net.Addr
 	RemoteAddr() net.Addr
 	Accept()
 	Close() error
-	Write(data []byte)
+	Closed() bool
+	Write(data []byte) error
 	Server() Server
 }
 

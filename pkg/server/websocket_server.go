@@ -56,9 +56,9 @@ func RunWebsocketServer(opts *Options) error {
 
 	srv := &WebsocketServer{
 		opts:     opts,
-		addr:     opts.WebsocketOpts.Addr,
-		rt:       opts.WebsocketOpts.ReadTimeout,
-		wt:       opts.WebsocketOpts.WriteTimeout,
+		addr:     opts.Websocket.Addr,
+		rt:       opts.Websocket.ReadTimeout,
+		wt:       opts.Websocket.WriteTimeout,
 		upgrader: upgrader,
 	}
 	return srv.ListenAndServe()

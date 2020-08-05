@@ -1,7 +1,7 @@
 package server
 
 import (
-	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -9,11 +9,6 @@ import (
 	"github.com/netraitcorp/netick/pkg/log"
 	"github.com/netraitcorp/netick/pkg/types"
 	"github.com/netraitcorp/netick/pkg/util"
-)
-
-var (
-	ErrAuthPasswordEmpty     = errors.New("authorize: password empty")
-	ErrAuthPasswordIncorrect = errors.New("authorize: password incorrect")
 )
 
 type Handler interface {
@@ -27,27 +22,23 @@ type ReadHandler struct {
 	uid        string
 	authorized bool
 	mu         sync.Mutex
+	timer      *time.Timer
 }
 
-func (h *ReadHandler) CreateConn() {
-	time.AfterFunc(h.conn.Server().Options().Auth.Timeout, h.authorizeTimeoutCheck)
-	/*
-		data, err := packet.Marshal(types.OpConnected, &pb.ConnectedRest{
-			ConnId: h.conn.ConnID(),
-		})
-		if err != nil {
-			return err
-		}
-		h.conn.Write(data)
-		return nil
-
-	*/
+func (r *ReadHandler) CreateConn() {
+	r.timer = time.AfterFunc(r.conn.Server().Options().Auth.Timeout, r.authorizeTimeoutCheck)
 }
 
-func (h *ReadHandler) Close() {
+func (r *ReadHandler) Close() {
+	if r.timer != nil {
+		r.timer.Stop()
+		r.timer = nil
+	}
+
+	accounts.RemoveAccount(r.conn.ConnID())
 }
 
-func (h *ReadHandler) ReadData(data []byte) (err error) {
+func (r *ReadHandler) ReadData(data []byte) (err error) {
 	if len(data) == 0 {
 		return
 	}
@@ -58,43 +49,47 @@ func (h *ReadHandler) ReadData(data []byte) (err error) {
 	}
 	switch opCode {
 	case types.OpAuth:
-		h.authorize(payload.(pb.AuthReq))
+		err = r.authorize(payload.(*pb.AuthReq))
 	}
 	return
 }
 
-func (h *ReadHandler) publish() {
-
-}
-
-func (h *ReadHandler) subscribe() {
-
-}
-
-func (h *ReadHandler) authorize(req pb.AuthReq) error {
-	pass := h.conn.Server().Options().Auth.Password
+func (r *ReadHandler) authorize(req *pb.AuthReq) error {
+	pass := r.conn.Server().Options().Auth.Password
 	if pass != "" {
-		if req.Password == "" {
-			return ErrAuthPasswordEmpty
+		if req.GetPassword() == "" {
+			return fmt.Errorf("ReadHandler.authorize: password empty, cid: %s", r.conn.ConnID())
 		}
-		if req.Password != util.Sha1(pass) {
-			return ErrAuthPasswordIncorrect
+		if req.GetPassword() != util.Sha1(pass) {
+			return fmt.Errorf("ReadHandler.authorize: password incorrect, cid: %s", r.conn.ConnID())
 		}
 	}
+	r.authorized = true
 
-	log.Info("ReadHandler.authorize: verified, req: %s", req)
+	accounts.AddAccount(NewAccount(r.conn))
 
-	h.authorized = true
+	data, err := packet.Marshal(types.OpAuthRest, &pb.AuthRet{
+		ConnId:     r.conn.ConnID(),
+		Authorized: true,
+	})
+	if err != nil {
+		return err
+	}
 
+	if err := r.conn.Write(data); err != nil {
+		return err
+	}
+
+	log.Info("ReadHandler.authorize: verified, cid: %s", r.conn.ConnID())
 	return nil
 }
 
-func (h *ReadHandler) authorizeTimeoutCheck() {
-	if h.authorized {
+func (r *ReadHandler) authorizeTimeoutCheck() {
+	if r.authorized {
 		return
 	}
-	log.Info("ReadHandler.authorizeTimeoutCheck: connID: %d", h.conn.ConnID())
-	_ = h.conn.Close()
+	log.Info("ReadHandler.authorizeTimeoutCheck: cid: %s", r.conn.ConnID())
+	_ = r.conn.Close()
 }
 
 func NewReadHandler(c Conn) *ReadHandler {

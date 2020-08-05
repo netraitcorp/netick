@@ -51,7 +51,7 @@ func NewOptions() *Options {
 	}
 }
 
-func InitLogger(opts *Options) {
+func Init(opts *Options) {
 	once.Do(func() {
 		hook := lumberjack.Logger{
 			Filename:   opts.Filename,

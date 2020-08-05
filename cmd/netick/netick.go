@@ -108,12 +108,12 @@ func main() {
 		configOpts.Env = types.EnvDev
 	}
 	configOpts.Level = "debug"
-	log.InitLogger(configOpts)
+	log.Init(configOpts)
 
 	srvOpts := server.NewOptions()
-	srvOpts.WebsocketOpts.Addr = addressFlag
+	srvOpts.Websocket.Addr = addressFlag
 
 	if err := server.RunWebsocketServer(srvOpts); err != nil {
-		log.Fatal("tcp server run error: %s\n", err.Error())
+		log.Fatal("websocket server run error: %s\n", err.Error())
 	}
 }

@@ -1,24 +1,58 @@
 package server
 
 import (
-	"errors"
 	"sync"
 )
 
-var (
-	ErrAccountNotExists    = errors.New("account: not exists")
-	ErrAccountNotSubscribe = errors.New("account: not subscribe topic")
-)
-
 type Account struct {
-	conn   Conn
-	topics sync.Map
+	conn Conn
+}
+
+func (acc *Account) ID() string {
+	return acc.conn.ConnID()
+}
+
+func NewAccount(conn Conn) *Account {
+	return &Account{
+		conn: conn,
+	}
 }
 
 type Accounts struct {
-	sync.Map
-	sync.Mutex
+	accs  sync.Map
+	delay []string
+	mu    sync.Mutex
 }
+
+func (as *Accounts) AddAccount(acc *Account) {
+	as.accs.Store(acc.ID(), acc)
+}
+
+func (as *Accounts) RemoveAccount(id string) {
+	if _, ok := as.accs.Load(id); ok {
+		as.accs.Delete(id)
+		return
+	}
+
+	as.mu.Lock()
+	as.delay = append(as.delay, id)
+	as.mu.Unlock()
+}
+
+func (as *Accounts) delayDestroy() {
+
+}
+
+func NewAccounts() *Accounts {
+	as := &Accounts{}
+	go as.delayDestroy()
+
+	return as
+}
+
+var accounts = NewAccounts()
+
+/*
 
 func (accs *Accounts) CreateAccount(conn Conn) {
 	accs.Store(conn.ConnID(), &Account{
@@ -68,4 +102,4 @@ func (accs *Accounts) RemoveAccount(id int64) {
 	accs.Delete(id)
 }
 
-var accounts = &Accounts{}
+*/
