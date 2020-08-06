@@ -39,6 +39,9 @@ func (*Packet) Unmarshal(payload []byte) (types.OpCode, interface{}, error) {
 	case types.OpAuth:
 		unpack = &pb.AuthReq{}
 		err = proto.Unmarshal(payload[1:], unpack.(*pb.AuthReq))
+	case types.OpSubscribe:
+		unpack = &pb.SubscribeReq{}
+		err = proto.Unmarshal(payload[1:], unpack.(*pb.SubscribeReq))
 	}
 	return opCode, unpack, err
 }

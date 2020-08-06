@@ -26,6 +26,7 @@ type ReadHandler struct {
 }
 
 func (r *ReadHandler) CreateConn() {
+	accounts.AddAccount(NewAccount(r.conn))
 	r.timer = time.AfterFunc(r.conn.Server().Options().Auth.Timeout, r.authorizeTimeoutCheck)
 }
 
@@ -50,8 +51,14 @@ func (r *ReadHandler) ReadData(data []byte) (err error) {
 	switch opCode {
 	case types.OpAuth:
 		err = r.authorize(payload.(*pb.AuthReq))
+	case types.OpSubscribe:
+		err = r.subscribe(payload.(*pb.SubscribeReq))
 	}
 	return
+}
+
+func (r *ReadHandler) subscribe(req *pb.SubscribeReq) error {
+	return nil
 }
 
 func (r *ReadHandler) authorize(req *pb.AuthReq) error {
@@ -66,9 +73,7 @@ func (r *ReadHandler) authorize(req *pb.AuthReq) error {
 	}
 	r.authorized = true
 
-	accounts.AddAccount(NewAccount(r.conn))
-
-	data, err := packet.Marshal(types.OpAuthRest, &pb.AuthRet{
+	data, err := packet.Marshal(types.OpAuthRet, &pb.AuthRet{
 		ConnId:     r.conn.ConnID(),
 		Authorized: true,
 	})

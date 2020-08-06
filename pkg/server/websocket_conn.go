@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strconv"
 	"sync"
 	"time"
 
@@ -31,15 +32,15 @@ func NewWebsocketConn(conn *websocket.Conn, srv Server) *WebsocketConn {
 	c := &WebsocketConn{
 		srv:    srv,
 		conn:   conn,
-		connID: util.Sha1(rawConnKey),
+		connID: util.Sha1(rawConnKey + strconv.Itoa(util.RandInt())),
 		buf:    make(chan []byte, 0x40),
 		closed: false,
 	}
 	c.handler = NewReadHandler(c)
+	c.handler.CreateConn()
+
 	c.conn.SetPongHandler(c.pongHandler)
 	c.startPingTimer()
-
-	c.handler.CreateConn()
 
 	log.Info("NewWebsocketConn: %s, cid: %s", rawConnKey, c.ConnID())
 

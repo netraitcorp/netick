@@ -12,3 +12,7 @@ message AuthRet {
     string conn_id = 1;
     bool authorized = 2;
 }
+
+message SubscribeReq {
+    string name = 1;
+}

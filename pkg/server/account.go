@@ -19,9 +19,8 @@ func NewAccount(conn Conn) *Account {
 }
 
 type Accounts struct {
-	accs  sync.Map
-	delay []string
-	mu    sync.Mutex
+	accs sync.Map
+	mu   sync.Mutex
 }
 
 func (as *Accounts) AddAccount(acc *Account) {
@@ -29,24 +28,11 @@ func (as *Accounts) AddAccount(acc *Account) {
 }
 
 func (as *Accounts) RemoveAccount(id string) {
-	if _, ok := as.accs.Load(id); ok {
-		as.accs.Delete(id)
-		return
-	}
-
-	as.mu.Lock()
-	as.delay = append(as.delay, id)
-	as.mu.Unlock()
-}
-
-func (as *Accounts) delayDestroy() {
-
+	as.accs.Delete(id)
 }
 
 func NewAccounts() *Accounts {
 	as := &Accounts{}
-	go as.delayDestroy()
-
 	return as
 }
 
