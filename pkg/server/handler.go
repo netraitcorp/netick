@@ -73,7 +73,7 @@ func (r *ReadHandler) authorize(req *pb.AuthReq) error {
 	}
 	r.authorized = true
 
-	data, err := packet.Marshal(types.OpAuthRet, &pb.AuthRet{
+	data, err := packet.Marshal(types.OpAuthRet, &pb.AuthResp{
 		ConnId:     r.conn.ConnID(),
 		Authorized: true,
 	})

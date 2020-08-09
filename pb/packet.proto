@@ -8,7 +8,7 @@ message AuthReq {
     string password = 1;
 }
 
-message AuthRet {
+message AuthResp {
     string conn_id = 1;
     bool authorized = 2;
 }

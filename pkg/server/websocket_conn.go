@@ -143,6 +143,7 @@ func (c *WebsocketConn) loopRead(ctx context.Context) {
 			if err := c.handler.ReadData(data); err != nil {
 				log.Error("Handler.ReadData error: cid: %s, err:%s", c.ConnID(), err.Error())
 				_ = c.Close()
+				return
 			}
 		}
 	}

@@ -11,12 +11,19 @@ const (
 
 type Conn interface {
 	ConnID() string
+
 	LocalAddr() net.Addr
+
 	RemoteAddr() net.Addr
+
 	Accept()
+
 	Close() error
+
 	Closed() bool
+
 	Write(data []byte) error
+
 	Server() Server
 }
 
